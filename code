@@ -1,0 +1,331 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Gamedev Canvas Workshop</title>
+    <style>
+      * {
+        padding: 0;
+        margin: 0;
+      }
+      canvas {
+        background: lightblue;
+        display: block;
+        margin: 0 auto;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="320" height="480"></canvas>
+
+    <script>
+
+
+      var canvas = document.getElementById("myCanvas");
+      var ctx = canvas.getContext("2d");
+      
+      var ballRadius = 20;
+
+
+      
+      let HP = 3
+        
+      const trashTypes = ["black", "blue", "yellow", "green"];
+
+      const binWidth = 70;
+      const binHeight = 100;
+
+      const binColors = ["black", "blue", "yellow", "green"];
+      const positions = [40,120,200,280];
+
+      const bins = binColors.map((color, i) => ({          //Создаём массив корзин
+        color,
+        type: trashTypes[i],
+        positionNumber: i,
+        x: positions[i]-(binWidth/2),
+        y: canvas.height - binHeight,
+        layer: i,
+        targetX: undefined,
+        targetY: undefined
+      }));
+
+      let draggedBin = null
+
+
+      
+
+      var rand_pos = Math.floor(Math.random() * positions.length);
+      
+      var ballX = positions[rand_pos];
+      var ballY = -ballRadius; 
+      var ballFallSpeed = 2;
+      let currentType = trashTypes[Math.floor(Math.random() * trashTypes.length)];
+
+
+      const loseWindow = {
+        x: 5,
+        y: 150,
+        width: canvas.width - 10,
+        height: canvas.height - 300,
+        color: "#F2F2F2"
+      };
+
+      class Button {
+        constructor(funktion, x, y, width = 70, height = 70, color = "#DEDEDE") {
+          this.funktion = funktion;
+          this.x = x;
+          this.y = y;
+          this.width = width;
+          this.height = height;
+          this.color = color;
+        }
+        
+        draw(ctx) {
+          ctx.fillStyle = this.color;
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+      }
+      
+      const obj = new Button("retry", 0, canvas.height/2);
+      obj.x = canvas.width/2 - obj.width/2;
+
+
+
+      function spawnNewTrash() {
+        currentType = trashTypes[Math.floor(Math.random() * trashTypes.length)];
+        ballY = -ballRadius;
+        rand_pos = Math.floor(Math.random() * positions.length);
+        ballX = positions[rand_pos];
+      }
+      
+    
+
+      function findClosestX(d) {
+        const closestX = positions.reduce((prev, curr) =>
+          Math.abs(curr - (d.x+binWidth/2)) < Math.abs(prev - (d.x+binWidth/2))
+          ? curr
+          : prev
+        );
+        return closestX
+      }
+      
+
+
+
+
+      //Click on the trash bin
+      canvas.addEventListener("mousedown", (event) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+        
+        // Sorting through bins
+        const sortedBins = bins.slice().sort((a, b) => a.layer - b.layer);
+        const hitBin = sortedBins.find(bin =>
+          mouseX >= bin.x &&
+          mouseX <= bin.x + binWidth &&
+          mouseY >= bin.y &&
+          mouseY <= bin.y + binHeight
+        );
+        
+        if (hitBin) {
+          draggedBin = hitBin;        // <--- remember which bin we are pulling
+          draggedBin.targetY = undefined
+          draggedBin.y = canvas.height - binHeight - 5;
+          draggedBin.targetX = undefined
+          
+          bins.forEach(bin => {
+            if (bin.layer < draggedBin.layer) { 
+              bin.layer += 1; 
+            };
+          });
+          draggedBin.layer = 0
+
+            
+          offsetX = mouseX - hitBin.x; // so the bin don't jump
+        }
+        
+      });              
+
+
+
+      //Moving the trash bin
+      window.addEventListener("mousemove", (event) => {
+        if (!draggedBin) return;
+        
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+
+        draggedBin.x = mouseX - offsetX;
+        if (draggedBin.x < 0) {
+          draggedBin.x = 0
+        } else if (draggedBin.x + binWidth > canvas.width) {
+          draggedBin.x = canvas.width - binWidth
+        }
+        
+      });
+
+
+
+      //The bin was released
+      window.addEventListener("mouseup", () => {
+        if (!draggedBin) return;
+
+        draggedBin.targetY = canvas.height - binHeight
+
+        
+        // find the nearest position
+        const newX = findClosestX(draggedBin);
+        
+        // find positions number
+        const newPositionNumber = positions.findIndex(p => p === newX); 
+
+        bins.forEach(bin => {
+          if (bin != draggedBin) {
+            if (draggedBin.positionNumber < newPositionNumber && bin.positionNumber > draggedBin.positionNumber && bin.positionNumber <= newPositionNumber) {
+              
+              bin.positionNumber -= 1; 
+              
+            } else if (draggedBin.positionNumber > newPositionNumber && bin.positionNumber < draggedBin.positionNumber && bin.positionNumber >= newPositionNumber) { 
+
+              bin.positionNumber += 1;
+              
+            };
+          };
+        });
+
+        draggedBin.positionNumber = newPositionNumber
+        
+        // update the X coordinates of all bins
+        bins.forEach(bin => {
+          bin.targetX = positions[bin.positionNumber] - binWidth / 2;
+        });
+
+        draggedBin = null;
+      });
+
+      
+
+
+
+      
+
+
+      //draw a ball
+      function drawBall() {
+        ctx.beginPath();
+        ctx.arc(ballX, ballY, ballRadius, 0, Math.PI*2);
+        ctx.fillStyle = currentType;
+        ctx.fill();
+        ctx.closePath();
+      }
+
+      
+
+      //draw bins
+      function drawBins(b) {
+        // Sort the baskets by layer: draw the larger layer number ones first
+        const sortedBins = bins.slice().sort((a, b) => b.layer - a.layer);
+
+  
+        // draw them in sorting order
+        sortedBins.forEach(bin => {
+          
+          const speed = 0.1 * (ballY > 200 ? ballY / 200 : 1); // The lower the value, the smoother. The lower the ball, the faster the trash cans move.
+          
+          if (bin.targetX !== undefined) {
+            bin.x += (bin.targetX - bin.x) * speed;
+
+            // teleport if it almost there
+            if (Math.abs(bin.x - bin.targetX) < 1) {
+              bin.x = bin.targetX;
+              bin.targetX = undefined;
+            }
+          }
+          
+          if (bin.targetY !== undefined) {
+            bin.y += (bin.targetY - bin.y) * (speed*2);
+
+            // teleport if it almost there
+            if (Math.abs(bin.y - bin.targetY) < 0.2) {
+              bin.y = bin.targetY;
+              bin.targetY = undefined;
+            }
+          }
+
+          ctx.fillStyle = bin.color;
+          ctx.fillRect(bin.x, bin.y, binWidth, binHeight);
+        });
+      }
+
+      
+
+      function drawLoseWindow(w) {
+        ctx.fillStyle = w.color;
+        ctx.fillRect(w.x, w.y, w.width, w.height);
+
+        ctx.font = "28px Arial";
+        ctx.fillStyle = "black";
+        ctx.fillText("Try Again", loseWindow.x+95, loseWindow.y + 35);
+      }
+
+
+      function drawHP() {
+        ctx.font = "35px Arial";
+        ctx.fillStyle = "black";
+        ctx.fillText(HP + "❤️", 3, 35);
+      }
+
+
+      function CheckWhereTheTrashGoes() {
+        if (ballY + ballFallSpeed > (draggedBin ? canvas.height : (canvas.height - binHeight)+ballRadius) ) {
+
+          const landingBin = bins.find(bin => findClosestX(bin) === ballX);
+          
+          if (landingBin) {
+            if (currentType === landingBin.type) {
+              //good 
+            } else {
+              HP -= 1;
+            }
+          } else {
+            HP -= 1;
+          }
+          
+          spawnNewTrash()
+          
+        }
+      }
+
+ 
+    
+
+      
+////////////////////////////////////////////////////////////////////////////////
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        drawBall();
+        drawBins();
+        drawHP();
+
+         
+        if (HP>0) {
+          ballY += ballFallSpeed;
+          CheckWhereTheTrashGoes()
+
+        } else {
+          drawLoseWindow(loseWindow)
+          obj.draw(ctx);
+        }
+
+        requestAnimationFrame(draw);
+      }
+
+
+
+      
+      requestAnimationFrame(draw);
+    </script>
+  </body>
+</html>
